@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<cobra document="https://github.com/WhaleShark-Team/cobra">
+    <name value="Unexpected_Ether"/>
+    <language value="sol"/>
+    <match mode="regex-only-match"><![CDATA[this\.balance]]></match>
+    <level value="3"/>
+    <solution>
+        ## Vulnerability
+        Ether can also be sent forcibly with some tricks. Problems will happen if this.balance is used in judgements.
+
+        ## Solution
+        Be careful when using this.balance. A state variable is recommended to track the balance of current contract.
+    </solution>
+    <test>
+        <case assert="true"><![CDATA[this.balance==1ether]]></case>
+    </test>
+    <status value="on"/>
+    <author name="Steven" email="stevenhu@hku.hk"/>
+</cobra>

@@ -105,7 +105,6 @@
                         <input type="file" class="btn_1" id="uploadFile" name="file" style="width: 100%;" accept="application/bacnet-xdd+zip,.tar,.gz,.rar,.zip,.tgz,.bz2">
                         <br>
                         <small>Support for upload extensions: tar.bz2|tar|gz|tgz|tar.gz|rar|zip</small>
-                        <small>只允许单文件上传，不允许文件夹拖拽</small>
 
                         <div id="progress">
                             <div class="bar"></div>
@@ -219,7 +218,7 @@
             maxNumberOfFiles: 1,
             processfail: function (e, result) {
                 $('#progress').empty();
-                $('#progress').html('文件类型错误！');
+                $('#progress').html('Error: Invalid file format!');
             },
             done: function (e, result) {
                 if (result.result.code === 1001) {

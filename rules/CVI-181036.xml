@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<cobra document="https://github.com/WhaleShark-Team/cobra">
+    <name value="Unspecified_visibilities"/>
+    <language value="sol"/>
+    <match mode="solidity-match"><![CDATA[function]]></match>
+    <level value="3"/>
+    <solution>
+        ## Vulnerability
+        The default visibility of solidity function is public if it is omitted or not specified. Unspecified visibility may result in potential problems. \
+        For example, a default public internal function is called externally.
+
+        ## Solution
+        Specify visibility of each function and make sure they are reasonable.
+    </solution>
+    <test>
+        <case assert="true"><![CDATA[function test() public {]]></case>
+    </test>
+    <status value="on"/>
+    <author name="Steven" email="stevenhu@hku.hk"/>
+</cobra>

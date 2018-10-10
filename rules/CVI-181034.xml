@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<cobra document="https://github.com/WhaleShark-Team/cobra">
+    <name value="Unsafe_delegatecall"/>
+    <language value="sol"/>
+    <match mode="regex-only-match"><![CDATA[delegatecall]]></match>
+    <level value="7"/>
+    <solution>
+        ## Vulnerability
+        The delegatecall is an external call, which runs in the context of the calling contract.
+
+        ## Solution
+        Be careful when using delegatecall to call an external function. Make sure the state of the calling contract won’t be modified. If possible, try to build stateless library to avoid such vulnerabilities.
+    </solution>
+    <test>
+        <case assert="true"><![CDATA[delegatecall]]></case>
+    </test>
+    <status value="on"/>
+    <author name="Steven" email="stevenhu@hku.hk"/>
+</cobra>

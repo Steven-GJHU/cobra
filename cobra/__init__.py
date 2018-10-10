@@ -18,11 +18,12 @@ import argparse
 import logging
 import traceback
 import platform
+from subprocess import call
 from .log import logger
 from . import cli, api, config
 from .cli import get_sid
 from .engine import Running
-from .utils import unhandled_exception_message, create_github_issue, set_config_hash, get_config_hash
+from .utils import unhandled_exception_message, create_github_issue
 from .report import Report
 
 from .__version__ import __title__, __introduction__, __url__, __version__
@@ -51,7 +52,6 @@ def main():
         parser_group_scan.add_argument('-sid', '--sid', dest='sid', action='store', default=None, help='scan id(API)')
         parser_group_scan.add_argument('-dels', '--dels', dest='dels', action='store_true', default=False, help='del target directory True or False')
         parser_group_scan.add_argument('-rp', '--report', dest='report', action='store_true', default=False, help='automation report Cobra data')
-        parser_group_scan.add_argument('-m', '--md5', dest='md5', action='store_true', default=False, help='Create projects file md5')
 
         parser_group_server = parser.add_argument_group('RESTful')
         parser_group_server.add_argument('-H', '--host', dest='host', action='store', default=None, metavar='<host>', help='REST-JSON API Service Host')
@@ -70,10 +70,6 @@ def main():
                 logger.critical('[REPORT] Cobra Report failed')
             else:
                 logger.info('[REPORT] Cobra Report Success ')
-            exit()
-
-        if args.md5 and args.port is None and args.host is None and args.target is '':
-            set_config_hash()
             exit()
 
         if args.host is None and args.port is None and args.target is '' and args.output is '':
@@ -107,16 +103,15 @@ def main():
             else:
                 # API call CLI mode
                 a_sid = args.sid
+            call(["./bin/init.sh"])
             cli.start(args.target, args.format, args.output, args.special_rules, a_sid, args.dels)
         t2 = time.time()
         logger.info('[INIT] Done! Consume Time:{ct}s'.format(ct=t2 - t1))
-
     except Exception as e:
         err_msg = unhandled_exception_message()
         exc_msg = traceback.format_exc()
         logger.warning(exc_msg)
-        if get_config_hash():  # 项目未被修改，提交issue
-            create_github_issue(err_msg, exc_msg)
+        create_github_issue(err_msg, exc_msg)
 
 
 if __name__ == '__main__':

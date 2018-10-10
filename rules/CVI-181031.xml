@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<cobra document="https://github.com/WhaleShark-Team/cobra">
+    <name value="Unsafe_randomness"/>
+    <language value="sol"/>
+    <match mode="regex-only-match"><![CDATA[(now)\s*(.+)]]></match>
+    <level value="1"/>
+    <solution>
+        ## Vulnerability
+        Unsafe randomness/Block timestamp manipulation
+
+        ## Solution
+        Avoid using variables related to future blocks, such as time-sensitive variables, contract addresses and so on.
+        Using trusted third-party randomness provider. However, this will introduce a centralized server which is a violation to decentralized virtue of blockchain.
+    </solution>
+    <test>
+        <case assert="true"><![CDATA[now==lastBlock_time]]></case>
+    </test>
+    <status value="on"/>
+    <author name="Steven" email="stevenhu@hku.hk"/>
+</cobra>

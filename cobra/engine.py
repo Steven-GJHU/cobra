@@ -15,6 +15,7 @@ import os
 import re
 import json
 import fcntl
+import time
 import traceback
 import subprocess
 import multiprocessing
@@ -28,6 +29,11 @@ from .cast import CAST
 from .parser import scan_parser
 from .cve import scan_cve
 from prettytable import PrettyTable
+from reentrancy import check_reentrancy
+from overflow import check_num_overflow
+from funcLevel import detectContractName
+from funcLevel import detectStructName
+from subprocess import call
 
 
 class Running:
@@ -159,13 +165,12 @@ def scan(target_directory, a_sid=None, s_sid=None, special_rules=None, language=
         if special_rules is None or len(special_rules) == 0:
             cve_vuls = scan_cve(target_directory)
             find_vulnerabilities += cve_vuls
-        else:
-            for rule in rules:
-                if rule.get('id').lower()[0:3] == '999':
-                    cve_vuls = scan_cve(target_directory, 'CVI-{num}.xml'.format(num=rule.get('id')))
-                    find_vulnerabilities += cve_vuls
     except Exception:
         logger.warning('[SCAN] [CVE] CVE rule is None')
+
+    """
+    2018.7.14
+    """
 
     def store(result):
         if result is not None and isinstance(result, list) is True:
@@ -199,6 +204,7 @@ def scan(target_directory, a_sid=None, s_sid=None, special_rules=None, language=
                 name=single_rule['name'],
                 language=single_rule['language']
             ))
+            logger.debug(str(single_rule['language']))
             if single_rule['language'] in languages:
                 single_rule['extensions'] = languages[single_rule['language']]['extensions']
                 push_rules.append(single_rule['id'])
@@ -219,6 +225,7 @@ def scan(target_directory, a_sid=None, s_sid=None, special_rules=None, language=
     for idx, x in enumerate(find_vulnerabilities):
         trigger = '{fp}:{ln}'.format(fp=x.file_path, ln=x.line_number)
         # commit = u'{time}, @{author}'.format(author=x.commit_author, time=x.commit_time)
+        # 2018.7.24-------------------------
         level = score2level(x.level)
         cvi = x.id[0:3]
         if cvi in vulnerabilities:
@@ -240,7 +247,9 @@ def scan(target_directory, a_sid=None, s_sid=None, special_rules=None, language=
     if vn == 0:
         logger.info('[SCAN] Not found vulnerability!')
     else:
-        logger.info("[SCAN] Trigger Rules/Not Trigger Rules/Off Rules: {tr}/{ntr}/{fr} Vulnerabilities ({vn})\r\n{table}".format(tr=len(trigger_rules), ntr=len(diff_rules), fr=off_rules, vn=len(find_vulnerabilities), table=table))
+        logger.info(
+            "[SCAN] Trigger Rules/Not Trigger Rules/Off Rules: {tr}/{ntr}/{fr} Vulnerabilities ({vn})\r\n{table}".format(
+                tr=len(trigger_rules), ntr=len(diff_rules), fr=off_rules, vn=len(find_vulnerabilities), table=table))
         if len(diff_rules) > 0:
             logger.info('[SCAN] Not Trigger Rules ({l}): {r}'.format(l=len(diff_rules), r=','.join(diff_rules)))
 
@@ -293,14 +302,21 @@ class SingleRule(object):
             param = [self.find, self.target_directory, "-type", "f"] + filters
         else:
             # grep
-            if self.sr['match-mode'] == const.mm_regex_only_match or self.sr['match-mode'] == const.mm_regex_param_controllable:
+            if self.sr['match-mode'] == const.mm_regex_only_match or self.sr[
+                'match-mode'] == const.mm_regex_param_controllable:
                 match = self.sr['match']
+                # logger.debug('*******111111************' + str(self.sr['id']) + str(match) + '=======================')
             elif self.sr['match-mode'] == const.mm_function_param_controllable:
                 # param controllable
                 if '|' in self.sr['match']:
                     match = const.fpc_multi.replace('[f]', self.sr['match'])
+                    # logger.debug('******222222*************' + str(self.sr['id']) + str(match) + '=======================')
                 else:
                     match = const.fpc_single.replace('[f]', self.sr['match'])
+                    # logger.debug('******333333*************' + str(self.sr['id']) + str(match) + '=======================')
+            elif self.sr['match-mode'] == const.mm_solidity_match:
+                match = self.sr['match']
+                # logger.debug('******666666666*************' + str(self.sr['id']) + str(match) + '=======================')
             else:
                 logger.warning('Exception match mode: {m}'.format(m=self.sr['match-mode']))
 
@@ -329,6 +345,8 @@ class SingleRule(object):
             pass
         if len(error) is not 0:
             logger.critical('[CVI-{cvi}] [ORIGIN] [ERROR] {err}'.format(cvi=self.sr['id'], err=error.strip()))
+
+        # logger.debug('*******************' + str(result) + '=======================')
         return result
 
     def process(self):
@@ -336,6 +354,17 @@ class SingleRule(object):
         Process Single Rule
         :return: SRV(Single Rule Vulnerabilities)
         """
+
+        # added by Steven for ast file generation start
+        if self.target_directory[-3:].lower() == 'sol':
+            filename = self.target_directory.split("/")[-1][:-4]
+            try:
+                if os.path.exists('./ast/{fn}.json'.format(fn=filename)) is False:
+                    call(["./bin/parser.sh", self.target_directory, filename])
+            except Exception as e:
+                logger.debug(traceback.format_exc())
+        # added by Steven for ast file generation end
+
         origin_results = self.origin_results()
         # exists result
         if origin_results == '' or origin_results is None:
@@ -343,6 +372,8 @@ class SingleRule(object):
             return None
 
         origin_vulnerabilities = origin_results.strip().split("\n")
+        # logger.debug('kkkkkjjjjj========' + str(origin_vulnerabilities) + 'sssssssdddddddd=======')
+        # logger.debug('mmmmmmmmmm========' + str(self.target_directory) + 'dddddddaaaaaaaa=======')
         for index, origin_vulnerability in enumerate(origin_vulnerabilities):
             origin_vulnerability = origin_vulnerability.strip()
             logger.debug('[CVI-{cvi}] [ORIGIN] {line}'.format(cvi=self.sr['id'], line=origin_vulnerability))
@@ -355,7 +386,8 @@ class SingleRule(object):
                 continue
             is_test = False
             try:
-                is_vulnerability, reason = Core(self.target_directory, vulnerability, self.sr, 'project name', ['whitelist1', 'whitelist2'], test=is_test, index=index).scan()
+                is_vulnerability, reason = Core(self.target_directory, vulnerability, self.sr, 'project name',
+                                                ['whitelist1', 'whitelist2'], test=is_test, index=index).scan()
                 if is_vulnerability:
                     logger.debug('[CVI-{cvi}] [RET] Found {code}'.format(cvi=self.sr['id'], code=reason))
                     vulnerability.analysis = reason
@@ -368,7 +400,8 @@ class SingleRule(object):
                     logger.debug('Not vulnerability: {code}'.format(code=reason))
             except Exception:
                 raise
-        logger.debug('[CVI-{cvi}] {vn} Vulnerabilities: {count}'.format(cvi=self.sr['id'], vn=self.sr['name'], count=len(self.rule_vulnerabilities)))
+        logger.debug('[CVI-{cvi}] {vn} Vulnerabilities: {count}'.format(cvi=self.sr['id'], vn=self.sr['name'],
+                                                                        count=len(self.rule_vulnerabilities)))
         return self.rule_vulnerabilities
 
     def parse_match(self, single_match):
@@ -418,7 +451,8 @@ class SingleRule(object):
 
 
 class Core(object):
-    def __init__(self, target_directory, vulnerability_result, single_rule, project_name, white_list, test=False, index=None):
+    def __init__(self, target_directory, vulnerability_result, single_rule, project_name, white_list, test=False,
+                 index=None):
         """
         Initialize
         :param: target_directory:
@@ -430,7 +464,6 @@ class Core(object):
         :param index: vulnerability index
         """
         self.data = []
-
         self.target_directory = target_directory
 
         self.file_path = vulnerability_result.file_path.strip()
@@ -577,6 +610,14 @@ class Core(object):
         :return: is_vulnerability, code
         """
         self.method = 0
+        # if self.file_path[-3:].lower() == 'sol':
+        #     filename = self.file_path.split("/")[-1][:-4]
+        #     try:
+        #         if os.path.exists('./ast/{fn}.json'.format(fn=filename)) is False:
+        #             logger.debug("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCC")
+        #             call(["./bin/parser.sh", self.file_path, filename])
+        #     except Exception as e:
+        #         logger.debug(traceback.format_exc())
         if len(self.code_content) > 512:
             self.code_content = self.code_content[:500]
         self.status = self.status_init
@@ -633,7 +674,58 @@ class Core(object):
                 match_result = re.findall(r"^(#|\/\*|\/\/)+", self.code_content)
                 if len(match_result) > 0:
                     return True, 'REGEX-ONLY-MATCH(注释中存在漏洞，建议删除漏洞代码)'
-                return True, 'REGEX-ONLY-MATCH(正则仅匹配+无修复规则)'
+                # added by Steven for solidity check start
+
+                # added by Steven for solidity check end
+
+                # add by Steven for solidity overflow check start
+                # if self.file_path[-3:].lower() == 'sol' and self.cvi == '181029':
+                #     logger.debug("HHHHHHHHEEEEEEEEEELLLLLLLLOOOOOOOO123456-{cvi}".format(cvi=self.cvi))
+                #     try:
+                #         call(["./bin/parser.sh", self.file_path, self.file_path.split("/")[-1][:-4]])
+                #         with open('./ast/' + self.file_path.split("/")[-1][:-4] + '.json') as f:
+                #             json_data = json.load(f)
+                #             warning = check_num_overflow(json_data)
+                #             logger.debug("skrskrskrskrskrskr "+"".join(warning))
+                #             logger.debug("asdasdasdadasdasd " + str(self.code_content).split("=")[-1].replace(" ", ""))
+                #             if str(self.code_content).split("=")[-1].replace(" ", "").replace(";", "") in "".join(warning):
+                #                 logger.debug("YYYYYYYYYYYEEEEEEEEEEESSSSSSSSSSS")
+                #                 return True, 'Overflow/Underflow'
+                #             else:
+                #                 return False, 'No Overflow/Underflow'
+                #     except Exception as e:
+                #         logger.debug(traceback.format_exc())
+                #         return False, 'Exception'
+                # add by Steven for solidity overflow check end
+                # add by Steven for solidity constructor check start
+                # if self.file_path[-3:].lower() == 'sol' and self.cvi == '181035':
+                #     logger.debug("HHHHHHHHEEEEEEEEEELLLLLLLLOOOOOOOO-{cvi}".format(cvi=self.cvi))
+                #     try:
+                #         call(["./bin/parser.sh", self.file_path, self.file_path.split("/")[-1][:-4]])
+                #         with open('./ast/' + self.file_path.split("/")[-1][:-4] + '.json') as f:
+                #             json_data = json.load(f)
+                #             contract_names = detectContractName(json_data)
+                #             logger.debug("skrskrskrskrskrskr " + "".join(contract_names))
+                #             logger.debug("asdasdasdadasdasd " + str(self.code_content).split("(")[0].replace("function ", ""))
+                #             if str(self.code_content).split("(")[0].replace("function ", "").replace(";", "") in "".join(
+                #                     contract_names):
+                #                 logger.debug("YYYYYYYYYYYEEEEEEEEEEESSSSSSSSSSS")
+                #                 return True, 'Deprecated constructor'
+                #             else:
+                #                 return False, 'None Deprecated constructor'
+                #     except Exception as e:
+                #         logger.debug(traceback.format_exc())
+                #         return False, 'Exception'
+                # add by Steven for solidity constructor check end
+                # add by Steven for solidity visibility check start
+                # if self.file_path[-3:].lower() == 'sol' and self.cvi == '181036':
+                #     if 'public' in self.code_content or 'private' in self.code_content or 'internal' in self.code_content or 'external' in self.code_content:
+                #         return False, 'Specified visibility'
+                #     else:
+                #         return True, 'Unspecified visibility'
+                # add by Steven for solidity visibility check end
+                else:
+                    return True, 'REGEX-ONLY-MATCH(正则仅匹配+无修复规则)'
         else:
             #
             # Function-Param-Controllable
@@ -647,7 +739,8 @@ class Core(object):
             logger.debug('[CVI-{cvi}] match-mode {mm}'.format(cvi=self.cvi, mm=self.rule_match_mode))
             if self.file_path[-3:].lower() == 'php':
                 try:
-                    ast = CAST(self.rule_match, self.target_directory, self.file_path, self.line_number, self.code_content)
+                    ast = CAST(self.rule_match, self.target_directory, self.file_path, self.line_number,
+                               self.code_content)
                     rule_repair = []
                     if self.rule_match_mode == const.mm_function_param_controllable:
                         rule_match = self.rule_match.strip('()').split('|')  # 漏洞规则整理为列表
@@ -674,7 +767,9 @@ class Core(object):
 
                                     logger.debug('[AST] [CODE] {code}'.format(code=result[0]['code']))
                                 else:
-                                    logger.debug('[AST] Parser failed / vulnerability parameter is not controllable {r}'.format(r=result))
+                                    logger.debug(
+                                        '[AST] Parser failed / vulnerability parameter is not controllable {r}'.format(
+                                            r=result))
                         except Exception as e:
                             logger.warning(traceback.format_exc())
                             raise
@@ -707,3 +802,104 @@ class Core(object):
                 except Exception as e:
                     logger.debug(traceback.format_exc())
                     return False, 'Exception'
+
+            # add by Steven for re-entrancy check start
+            # if self.file_path[-3:].lower() == 'sol' and self.cvi == '181030':
+            #     logger.debug("HHHHHHHHEEEEEEEEEELLLLLLLLOOOOOOOO")
+            #     try:
+            #         call(["./bin/parser.sh", self.file_path, self.file_path.split("/")[-1][:-4]])
+            #         with open('./ast/' + self.file_path.split("/")[-1][:-4] + '.json') as f:
+            #             json_data = json.load(f)
+            #             re_warning = check_reentrancy(json_data)
+            #             if re_warning is not None:
+            #                 return True, 'Re-entrancy'
+            #     except Exception as e:
+            #         logger.debug(traceback.format_exc())
+            #         return False, 'Exception'
+            # add by Steven for re-entrancy check end
+
+            # add by Steven for solidity overflow check start
+            # if self.file_path[-3:].lower() == 'sol' and self.cvi == '181029':
+            #     logger.debug("HHHHHHHHEEEEEEEEEELLLLLLLLOOOOOOOO123456-{cvi}".format(cvi=self.cvi))
+            #     try:
+            #         call(["./bin/parser.sh", self.file_path, filename])
+            #         with open('./ast/{fn}.json'.format(fn=filename)) as f:
+            #             json_data = json.load(f)
+            #             ov_warning = check_num_overflow(json_data)
+            #             if str(self.code_content).split("=")[-1].replace(" ", "").replace(";", "") in "".join(
+            #                     ov_warning):
+            #                 return True, 'Overflow/Underflow'
+            #             else:
+            #                 return False, 'No Overflow/Underflow'
+            #     except Exception as e:
+            #         logger.debug(traceback.format_exc())
+            #         return False, 'Exception'
+            # add by Steven for solidity overflow check end
+
+            # added by Steven for solidity check start
+            if self.file_path[-3:].lower() == 'sol':
+                filename = self.file_path.split("/")[-1][:-4]
+                logger.debug("Solidity check start...")
+                try:
+                    if os.path.exists('./ast/{fn}.json'.format(fn=filename)) is False:
+                        call(["./bin/parser.sh", self.file_path, filename])
+                    with open('./ast/{fn}.json'.format(fn=filename)) as f:
+                        json_data = json.load(f)
+                        ov_warning = check_num_overflow(json_data)
+                        re_warning = check_reentrancy(json_data)
+                        contract_names = detectContractName(json_data)
+                        struct_names = detectStructName(json_data)
+                    if self.cvi == '181029':
+                        exp = self.str_trim(str(self.code_content))
+                        logger.debug("Start cvi-{cvi} Overflow/Underflow check".format(cvi=self.cvi))
+                        # logger.debug("LLLLLLLLLLLLLLLLAAAAAAAAAAAAAAAA" + exp)
+                        # logger.debug("KKKKKKKKKKKKKKKKOOOOOOOOOOOOOOOO" + "".join(ov_warning))
+                        if exp in "".join(ov_warning):
+                            return True, 'Overflow/Underflow'
+                        else:
+                            return False, 'No Overflow/Underflow'
+                    elif self.cvi == '181030':
+                        logger.debug("Start cvi-{cvi} Re-entrancy check".format(cvi=self.cvi))
+                        # logger.debug("KKKKKKKKKKKKKKKKOOOOOOOOOOOOOOOO" + "".join(re_warning))
+                        # logger.debug("AAAAAAAAAAAAAAASSSSSSSSSSSSSSs" + self.code_content)
+                        test_effect = str(self.code_content).split("call.value(")[1].split(")")[0]
+                        if test_effect in "".join(re_warning):
+                            return True, 'Re-entrancy'
+                        else:
+                            return False, 'No Re-entrancy'
+                    elif self.cvi == '181035':
+                        logger.debug("Start cvi-{cvi} Constructor check".format(cvi=self.cvi))
+                        if str(self.code_content).split("(")[0].replace("function ", "").replace(";",
+                                                                                                 "") in "".join(
+                            contract_names):
+                            return True, 'Deprecated Constructor'
+                        else:
+                            return False, 'No Deprecated Constructor'
+                    elif self.cvi == '181036':
+                        logger.debug("Start cvi-{cvi} Visibility check".format(cvi=self.cvi))
+                        if 'public' in self.code_content or 'private' in self.code_content or 'internal' in self.code_content or 'external' in self.code_content:
+                            return False, 'Specified visibility'
+                        else:
+                            return True, 'Unspecified visibility'
+                    elif self.cvi == '181037':
+                        logger.debug("Start cvi-{cvi} Storage check".format(cvi=self.cvi))
+                        for name in struct_names:
+                            # logger.debug("PPPPPPPPPPPPPPP" + str(name))
+                            # logger.debug("QQQQQQQQQQQQQQQQQQ" + self.code_content)
+                            if str(name) in str(self.code_content) and 'memory' not in str(
+                                    self.code_content) and 'storage' not in str(self.code_content):
+                                return True, 'Uninitialized storage pointer'
+                        return False, 'No uninitialized storage pointer'
+                    else:
+                        pass
+
+                except Exception as e:
+                    logger.debug(traceback.format_exc())
+                    return False, 'Exception'
+            # added by Steven for solidity check end
+
+    def str_trim(self, str):
+        pattern = re.compile(r'(uint|int)\d*\s+')
+        new_str = re.sub(pattern, "", str).replace(" ", "").replace(";", "")
+        # print(new_str)
+        return new_str

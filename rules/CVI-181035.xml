@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<cobra document="https://github.com/WhaleShark-Team/cobra">
+    <name value="Deprecated_constructor"/>
+    <language value="sol"/>
+    <match mode="solidity-match"><![CDATA[function\s+([A-Za-z|_]+)\(]]></match>
+    <level value="7"/>
+    <solution>
+        ## Vulnerability
+        In the new version of Solidity, constructor keyword is recommended while the past constructors are defined as functions which has been deprecated.
+
+        ## Solution
+        Using the new constructor keyword. In case that the contract name changes and carelessly leave the constructor name unchanged.
+    </solution>
+    <test>
+        <case assert="true"><![CDATA[function test() public {]]></case>
+    </test>
+    <status value="on"/>
+    <author name="Steven" email="stevenhu@hku.hk"/>
+</cobra>

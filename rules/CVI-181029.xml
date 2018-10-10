@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<cobra document="https://github.com/WhaleShark-Team/cobra">
+    <name value="Overflow/Underflow"/>
+    <language value="sol"/>
+    <match mode="solidity-match"><![CDATA[[\+\-\*]]]></match>
+    <level value="5"/>
+    <solution>
+        ## Vulnerability
+        Integer overflow/underflow may exist
+
+        ## Solution
+        Be careful about all operators ‘+’, ‘-’ and ‘*’. For example, using assert() to check whether overflow or underflow happens.
+        Using recommended libraries, like Open Zepplin’s SafeMath. Or we can even build our own libraries to replace the standard operators ‘+’, ‘-’ and ‘*’.
+    </solution>
+    <test>
+        <case assert="true"><![CDATA[a+=a]]></case>
+    </test>
+    <status value="on"/>
+    <author name="Steven" email="stevenhu@hku.hk"/>
+</cobra>

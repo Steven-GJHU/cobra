@@ -82,30 +82,25 @@ def dict_to_csv(vul_list, filename):
     :return:
     """
     # 排序并将 target 调整到第一列
-    try:
-        header = sorted(vul_list[0].keys())
-        header.remove('target')
-        header.insert(0, 'target')
+    header = sorted(vul_list[0].keys())
+    header.remove('target')
+    header.insert(0, 'target')
 
-        # 去除列表中的换行符
-        for vul in vul_list:
-            vul['solution'] = vul.get('solution').replace('\n', '')
+    # 去除列表中的换行符
+    for vul in vul_list:
+        vul['solution'] = vul.get('solution').replace('\n', '')
 
-        if not os.path.exists(filename):
-            with open(filename, 'w', encoding='utf-8') as f:
-                # 防止在 Excel 中中文显示乱码
-                f.write(BOM_UTF8)
-                csv_writer = csv.DictWriter(f, header)
-                csv_writer.writeheader()
-                csv_writer.writerows(vul_list)
-                return True
-        else:
-            with open(filename, 'a', encoding='utf-8') as f:
-                csv_writer = csv.DictWriter(f, header)
-                csv_writer.writerows(vul_list)
-                return True
-    except IndexError:
-        return False
+    if not os.path.exists(filename):
+        with open(filename, 'w', encoding='utf-8') as f:
+            # 防止在 Excel 中中文显示乱码
+            f.write(BOM_UTF8)
+            csv_writer = csv.DictWriter(f, header)
+            csv_writer.writeheader()
+            csv_writer.writerows(vul_list)
+    else:
+        with open(filename, 'a', encoding='utf-8') as f:
+            csv_writer = csv.DictWriter(f, header)
+            csv_writer.writerows(vul_list)
 
 
 def dict_to_pretty_table(vul_list):
@@ -194,10 +189,7 @@ def write_to_file(target, sid, output_format='', filename=None):
     elif output_format == 'csv' or output_format == 'CSV':
         for vul in scan_data.get('vulnerabilities'):
             vul['target'] = scan_data.get('target')
-        res = dict_to_csv(scan_data.get('vulnerabilities'), filename)
-        if res is False:
-            logger.info('[EXPORT] Not found vulnerability, Can\'t export csv file')
-            return False
+        dict_to_csv(scan_data.get('vulnerabilities'), filename)
 
     else:
         logger.warning('[EXPORT] Unknown output format.')
